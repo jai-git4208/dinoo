@@ -21,6 +21,7 @@ local jumpForce = -500
 -- Game States
 local STATE_RUNNING = "running"
 local STATE_BOSS = "boss"
+local STATE_WIN = "win"
 local gameState = STATE_RUNNING
 
 -- Boss Fight Variables
@@ -41,14 +42,24 @@ local biteRange = 60
 local tailRange = 100
 local attackEffects = {} -- For visual feedback
 
-local images = {}
+local images = {
+    bosses = {}
+}
 local dinoScale = 1
+local bossScale = 1
+local fonts = {}
 
 function love.load()
-    love.window.setTitle("Dino Runner")
+    love.window.setTitle("Dinooooo")
     
-    images.dino = love.graphics.newImage("assets/dino.png")
-    images.cactus = love.graphics.newImage("assets/cactus.png")
+    images.dino = love.graphics.newImage("assets/dino.jpeg")
+    images.cactus = love.graphics.newImage("assets/obstacle.jpeg")
+    
+    -- Load all boss images
+    local bossFiles = {"boss1.png", "boss2.png", "boss4.png", "boss5.jpeg", "boss6.jpeg"}
+    for _, file in ipairs(bossFiles) do
+        table.insert(images.bosses, love.graphics.newImage("assets/" .. file))
+    end
     
     local targetHeight = 60
     dinoScale = targetHeight / images.dino:getHeight()
@@ -58,18 +69,26 @@ function love.load()
     ground.y = love.graphics.getHeight() - ground.height
     player.y = ground.y - player.height + 1
     
-    love.graphics.setFont(love.graphics.newFont(20))
+    fonts.main = love.graphics.newFont(20)
+    fonts.win = love.graphics.newFont(40)
+    love.graphics.setFont(fonts.main)
 end
 
 function love.update(dt)
-    if gameOver then return end
+    if gameOver or gameState == STATE_WIN then return end
     
     if gameState == STATE_RUNNING then
         score = score + dt * 10
         gameSpeed = 300 + score * 0.5
         
+        -- Win Condition at 500 score
+        if score >= 500 then
+            gameState = STATE_WIN
+            if score > highScore then highScore = score end
+        end
+        
         -- Trigger boss fight every 100 score
-        if math.floor(score) >= lastBossScore + 100 then
+        if gameState == STATE_RUNNING and math.floor(score) >= lastBossScore + 100 then
             startBossFight()
         end
         
@@ -118,7 +137,15 @@ function startBossFight()
     playerHealth = 100
     boss.health = 200 + (score * 0.5) -- Scaled health
     boss.maxHealth = boss.health
-    boss.x = love.graphics.getWidth() - 150
+    
+    -- Pick a random boss image
+    boss.image = images.bosses[math.random(#images.bosses)]
+    local targetBossHeight = 120
+    boss.scale = targetBossHeight / boss.image:getHeight()
+    boss.width = boss.image:getWidth() * boss.scale
+    boss.height = targetBossHeight
+    
+    boss.x = love.graphics.getWidth() - boss.width - 50
     boss.y = ground.y - boss.height
     player.isJumping = false
     player.velocityY = 0
@@ -197,8 +224,13 @@ function love.draw()
     
     if gameState == STATE_BOSS then
         -- Draw Boss
-        love.graphics.setColor(1, 0, 0) -- Red boss
-        love.graphics.rectangle("fill", boss.x, boss.y, boss.width, boss.height)
+        love.graphics.setColor(1, 1, 1)
+        if boss.image then
+            love.graphics.draw(boss.image, boss.x, boss.y, 0, boss.scale, boss.scale)
+        else
+            love.graphics.setColor(1, 0, 0) -- Fallback
+            love.graphics.rectangle("fill", boss.x, boss.y, boss.width, boss.height)
+        end
         
         -- Boss Health Bar
         love.graphics.setColor(0, 0, 0)
@@ -229,11 +261,23 @@ function love.draw()
         love.graphics.print("GAME OVER", love.graphics.getWidth() / 2 - 60, love.graphics.getHeight() / 2 - 30)
         love.graphics.print("Press SPACE to restart", love.graphics.getWidth() / 2 - 100, love.graphics.getHeight() / 2 + 10)
     end
+    
+    if gameState == STATE_WIN then
+        love.graphics.setColor(0, 0, 1, 0.7) -- Blue win screen
+        love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
+        
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.setFont(fonts.win)
+        love.graphics.print("GO FIND JOB BRO!", love.graphics.getWidth() / 2 - 150, love.graphics.getHeight() / 2 - 30)
+        
+        love.graphics.setFont(fonts.main)
+        love.graphics.print("Press SPACE to restart", love.graphics.getWidth() / 2 - 100, love.graphics.getHeight() / 2 + 50)
+    end
 end
 
 function love.keypressed(key)
     if key == "space" or key == "up" then
-        if gameOver then
+        if gameOver or gameState == STATE_WIN then
             restartGame()
         elseif gameState == STATE_RUNNING and not player.isJumping then
             player.isJumping = true
